@@ -1,14 +1,15 @@
-function drawVars(line, vars, index, forVar = null) {
+function drawVars(line, vars, index, variable = null, value = null) {
     document.write("<tr>");
     document.write("<td class=\"table-success\">" + (index+1) + " - " + convertToHTML(line) + "</td>");
     for (let prop in vars) {
-        if(vars[prop] === "?undefined?") {
-            continue;
+        if(variable == prop) {
+            document.write("<td>" + value + "</td>");
+        } else {
+            if(vars[prop] === "?undefined?") {
+                continue;
+            }
+            document.write("<td>" + vars[prop] + "</td>");
         }
-        document.write("<td>" + vars[prop] + "</td>");
-    }
-    if(forVar != null) {
-        document.write("<td>" + forVar + "</td>");
     }
     document.write("</tr>");
 }
@@ -17,20 +18,21 @@ function drawFor(vars, assign, condition, line, addDeclare = "") {
     let value = null;
     let result = false;
     let code = "";
-    for(var variable in vars) {
+    for(let variable in vars) {
         if(vars[variable] === "?undefined?") {
             continue;
         }
         code += "let " + variable + " = " + toJSVar(vars[variable]) + "\n";
     }
-    code += assign + addDeclare + "\nresult = " + condition;
+    let variable = assign.substring(4,assign.indexOf("="));
+    code += assign + "\nvalue = " + variable + "\nresult = " + condition;
     eval(code);
-    drawVars(assign, vars, line, value);
+    drawVars(assign, vars, line, variable.match(/\w+/), value);
     drawIf(condition, vars, line, "table-secondary", assign);
 }
 
 function drawStartFor(vars, assign, condition, line) {
-    drawFor(vars, assign, condition, line, "\nvalue = " + assign.substring(4,assign.indexOf("=")));
+    drawFor(vars, assign, condition, line);
 }
 
 function drawIf(condition, vars, line, color="table-primary", forVar = "") {
@@ -67,12 +69,12 @@ function drawIf(condition, vars, line, color="table-primary", forVar = "") {
     document.write("</tr>");
 }
 
-function toFixedFor(name, vars, line, currentLine) {
+function toFixedFor(vars, line, currentLine) {
     line = line.substring(3,line.length-1).trim();
     line = line.substring(1,line.length);
     let pieces = line.split(";");
 
-    let result = getResultVars(vars, currentLine)
+    let result = getResultVars(vars, currentLine.start)
 
     let parts = [
         toFixedForCondition("drawStartFor", result, pieces[0], pieces[1], currentLine.start),
@@ -84,24 +86,26 @@ function toFixedFor(name, vars, line, currentLine) {
 function getResultVars(vars, currentLine) {
     let result = "{";
     for(let i=0;i<vars.length;i++) {
-        result += "\"" + vars[i].name + "\":typeof " + vars[i].name + " === \"undefined\" ? \"?undefined?\" : " + vars[i].name + " ,";
+        if(vars[i].index <= currentLine) {
+            result += "\"" + vars[i].name + "\":(typeof " + vars[i].name + " === \"undefined\") ? \"?undefined?\" : " + vars[i].name + " ,";
+        }
     }
     result = result.substring(0,result.length-1) + "}";
     return result;
 }
 
 function toFixedForCondition(name, result, assign, condition, currentLine) {
-    return name + "(" + result + ",\"" + assign + "\",\"" + condition + "\"," + currentLine + ")"; 
+    return name + "(" + result + ",\"" + assign + "\",\"" + condition + "\"," + currentLine + ");"; 
 }
 
 function toFixedVars(name, vars, line, currentLine) {
     let result = getResultVars(vars, currentLine)
-    return name + "(\"" + line + "\"," + result + "," + currentLine + ")";
+    return name + "(\"" + line + "\"," + result + "," + currentLine + ");";
 }
 
 function toFixedIf(name, condition, vars, currentLine) {
     let result = getResultVars(vars, currentLine)
-    return name + "(\"" + condition + "\"," + result + "," + currentLine + ")";
+    return name + "(\"" + condition + "\"," + result + "," + currentLine + ");";
 }
 
 
@@ -157,7 +161,7 @@ function getURLContent(theUrl, linesPrinter = [])
                             break;
                         }
                     }
-                    if(!exists) {
+                    if(!exists) { 
                         vars.push({ "index" : i, name : match[1] });
                         document.write("<th>" + match[1] + "</th>");
                     }
@@ -206,7 +210,7 @@ function getURLContent(theUrl, linesPrinter = [])
                 if(current.startsWith("if(")) {
                     lineInsertion[line.start].before.push(toFixedIf("drawIf",current,vars,line.start));
                 } else if(current.startsWith("for(")) {
-                    let parts = toFixedFor("drawFor",vars,current,line);
+                    let parts = toFixedFor(vars,current,line);
                     lineInsertion[line.start].before.push(parts[0]);
                     if(typeof lineInsertion[line.end] === 'undefined') {
                         lineInsertion[line.end] = {before:[],after:[]};
@@ -216,7 +220,6 @@ function getURLContent(theUrl, linesPrinter = [])
                     lineInsertion[line.start].after.push(toFixedVars("drawVars",vars,current,line.start));
                 }
             }
-            console.log(lineInsertion);
             for(let i=lineInsertion.length-1;i>=0;i--) {
                 if(typeof lineInsertion[i] === "undefined") {
                     continue;
@@ -229,7 +232,6 @@ function getURLContent(theUrl, linesPrinter = [])
                 }
             }
             let code = lines.join("\n");
-            console.log(code);
             eval(code);
             document.write("</table>");
         }
