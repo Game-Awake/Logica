@@ -9,9 +9,48 @@ function drawVars(line, vars, index, variable = null, value = null, forLine = ""
             document.write("<td>" + toJSVar(vars[i].value) + "</td>");
         }
     }
+    if(forLine != "") {
+        document.write("<td>" + toJSVar(value) + "</td>");
+    }
     document.write("</tr>");
 }
 
+function drawFunction(vars, line, index) {
+    document.write("<tr>");
+    document.write("<td class=\"table-warning\">" + (index) + " - " + convertToHTML(line) + "</td>");
+    document.write("<td>");
+    document.write("<table class=\"table table-warning\">");
+    document.write("<tr>");
+    for(var prop in vars) {
+        document.write("<th>" + prop + "</th>");
+    }
+    document.write("</tr>");
+    document.write("<tr>");
+    for(var prop in vars) {
+        document.write("<td>" + toJSVar(vars[prop]) + "</td>");
+    }
+    document.write("</td>");
+    document.write("</tr>");
+    document.write("</table>");
+    document.write("</td>");
+    document.write("</tr>");
+}
+
+function drawReturn(vars,line, index) {
+    document.write("<tr class=\"table-warning\">");
+    document.write("<td>" + (index) + " - " + convertToHTML(line) + "</td>");
+    line = line.substring(6,line.length-1).trim();
+    let awake_213;
+
+    let code = "";
+    for(let i=0;i<vars.length;i++) {
+        code += "let " + vars[i].name + " = " + toJSVar(vars[i].value) + "\n";
+    }
+    code += "\nawake_213 = " + line;
+    eval(code);
+    document.write("<td>" + awake_213 + "</td>");
+    document.write("</tr>");
+}
 function drawWhile(whileLine, vars, line) {
     drawIf(whileLine, vars, line, "table-secondary")
 }
@@ -24,6 +63,7 @@ function drawFor(vars, forLine, assign, condition, line, variable = "") {
     }
     if(variable == "") {
         variable = assign.match(/\w+/) + "";
+        forLine = "";
     }
     code += assign + "\nawake_2423423 = " + variable;
     eval(code);
@@ -90,13 +130,37 @@ function toFixedFor(vars, line, currentLine) {
     return parts;
 }
 
+function toFixedFunction(line, currentLine) {
+    let textLine = line;
+    line = line.substring(line.indexOf("(")+1,line.length-1).trim();
+    line = line.substring(0,line.length-1);
+
+    let parms = line.split(",");
+
+    let result = "{";
+    if(parms[0].trim() != "") {
+        for(let i=0;i<parms.length;i++) {
+            let parm = parms[i].match(/\w+/);
+            result += "\"" + parm + "\":" + parm + ",";    
+        }
+    }
+    if(result.length > 1) {
+        result = result.substring(0,result.length-1);
+    }
+    return "drawFunction(" + result + "},\"" + textLine + "\"," + currentLine +")";
+}
+
+function toFixedReturn(vars,line, currentLine) {
+    return getResultVars(vars, currentLine) + "\ndrawReturn(awake_vars12,\"" + line + "\"," + currentLine +")";
+}
+
 function getResultVars(vars, currentLine, append = 1) {
     let result = "awake_vars12 = []\ntry {\n";
     for(let i=0;i<vars.length;i++) {
-        if(vars[i].index < currentLine + append) {
+        //if(vars[i].index < currentLine + append) {
             result += "awake_vars12.push({\"name\":\"" + vars[i].name + "\",\"value\":" + vars[i].name + "});\n";
             //result += "\"" + vars[i].name + "\":(typeof " + vars[i].name + " === \"undefined\") ? \"?undefined?\" : " + vars[i].name + " ,";
-        }
+        //}
     }
     return result + "} catch {\n}\n";
 }
@@ -307,6 +371,13 @@ function getURLContent(theUrl, linesPrinter = [])
                         lineInsertion[line.end-1] = {before:[],after:[]};
                     }
                     lineInsertion[line.end-1].after.push(parts[1]);
+                } else if(current.match(/function\s*/)) {
+                    if(typeof lineInsertion[line.start] === 'undefined') {
+                        lineInsertion[line.start] = {before:[],after:[]};
+                    }
+                    lineInsertion[line.start].after.push(toFixedFunction(current,line.start));
+                } else if(current.match(/return\s*/)) {
+                    lineInsertion[line.start].before.push(toFixedReturn(vars,current,line.start));
                 }else {
                     lineInsertion[line.start].after.push(toFixedVars("drawVars",vars,current,line.start));
                 }
